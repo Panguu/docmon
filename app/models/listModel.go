@@ -8,12 +8,14 @@ import (
 	"github.com/charmbracelet/bubbles/paginator"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )
 
+type dockerClientListInitalized []types.Container
+
+// List Model Struct
 type ListModel struct {
 	Client           *client.Client
 	pg               paginator.Model
@@ -25,28 +27,19 @@ type ListModel struct {
 	extendedHelpFlag bool
 }
 
-type dockerClientListInitalized []types.Container
-
+// Get Contianer List
 func dockerContianersList(m *ListModel) ([]types.Container, error) {
-	containers, err := m.Client.ContainerList(context.Background(), container.ListOptions{All: true})
+	containers, err := m.Client.ContainerList(
+		context.Background(),
+		container.ListOptions{All: true},
+	)
 	if err != nil {
 		return nil, err
 	}
 	return containers, nil
 }
 
-func (m *ListModel) Init() tea.Cmd {
-
-	m.vp = viewport.Model{}
-	pg := paginator.New()
-	pg.Type = paginator.Dots
-	pg.ActiveDot = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "235", Dark: "252"}).Render("•")
-	pg.InactiveDot = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "250", Dark: "238"}).Render("•")
-	m.pg = pg
-	m.items, _ = dockerContianersList(m)
-	m.pg.SetTotalPages(len(m.items))
-	return m.intervalUpdates()
-}
+// Update Containers List every second
 func (m *ListModel) intervalUpdates() tea.Cmd {
 	return tea.Tick(time.Second,
 		func(_ time.Time) tea.Msg {
@@ -56,6 +49,19 @@ func (m *ListModel) intervalUpdates() tea.Cmd {
 		},
 	)
 }
+func (m *ListModel) Init() tea.Cmd {
+
+	m.vp = viewport.Model{}
+	pg := paginator.New()
+	pg.Type = paginator.Dots
+	pg.ActiveDot = activeDot
+	pg.InactiveDot = inactiveDot
+	m.pg = pg
+	m.items, _ = dockerContianersList(m)
+	m.pg.SetTotalPages(len(m.items))
+	return m.intervalUpdates()
+}
+
 func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
@@ -77,34 +83,62 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.vp.Height = m.height - 2
 			return m, nil
+
 		case "r":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
-			m.Client.ContainerRestart(context.Background(), m.items[start+m.cursorPos].ID, container.StopOptions{})
+			m.Client.ContainerRestart(
+				context.Background(),
+				m.items[start+m.cursorPos].ID,
+				container.StopOptions{},
+			)
+
 		case "s":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
-			m.Client.ContainerStart(context.Background(), m.items[start+m.cursorPos].ID, container.StartOptions{})
+			m.Client.ContainerStart(
+				context.Background(),
+				m.items[start+m.cursorPos].ID,
+				container.StartOptions{},
+			)
+
 		case "p":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
-			m.Client.ContainerStop(context.Background(), m.items[start+m.cursorPos].ID, container.StopOptions{})
+			m.Client.ContainerStop(
+				context.Background(),
+				m.items[start+m.cursorPos].ID,
+				container.StopOptions{},
+			)
+
 		case "x":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
-			m.Client.ContainerKill(context.Background(), m.items[start+m.cursorPos].ID, "SIGKILL")
+			m.Client.ContainerKill(
+				context.Background(),
+				m.items[start+m.cursorPos].ID,
+				"SIGKILL",
+			)
+
 		case "d":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
-			m.Client.ContainerRemove(context.Background(), m.items[start+m.cursorPos].ID, container.RemoveOptions{RemoveVolumes: true, Force: true})
+			m.Client.ContainerRemove(
+				context.Background(),
+				m.items[start+m.cursorPos].ID,
+				container.RemoveOptions{RemoveVolumes: true, Force: true},
+			)
 
 		}
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.vp.Height = msg.Height - 2
 		m.vp.Width = msg.Width
 		m.pg.PerPage = (msg.Height - 2) / 4
+
 	case dockerClientListInitalized:
 		m.items = msg
 		cmd = m.intervalUpdates()
 		return m, cmd
 	}
+
 	itemsOnPage := m.pg.ItemsOnPage(len(m.items))
 	if m.cursorPos > itemsOnPage-1 {
 		m.cursorPos = max(0, itemsOnPage-1)
@@ -112,12 +146,6 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.pg, cmd = m.pg.Update(msg)
 	return m, cmd
 }
-
-var containerStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
-var containerSelectedStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("3"))
-var containerNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Render
-var containerIdStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("223")).Render
-var containerImageStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render
 
 func (m *ListModel) View() string {
 	var outputStr string
@@ -127,9 +155,13 @@ func (m *ListModel) View() string {
 			outputStr += "\n" + containerSelectedStyle.Width(m.width-2).Render(containerString(v))
 			continue
 		}
-		outputStr += "\n" + containerStyle.Width(m.width-2).Render(containerString(v))
+		outputStr += "\n" + containerStyle.
+			Width(m.width-2).
+			Render(containerString(v))
 	}
+
 	m.vp.SetContent(outputStr)
+
 	if m.extendedHelpFlag {
 		return m.vp.View() + "\n" + m.pg.View() + extendedHelpView()
 	}

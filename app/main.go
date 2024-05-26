@@ -1,11 +1,10 @@
 package main
 
 import (
-	"docmon/tui"
+	tui "docmon/models"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/docker/docker/client"
 )
 
@@ -26,15 +25,11 @@ const (
 	clientUninit
 )
 
-type viewModelInit int
-
-const (
-	viewInit viewModelInit = iota
-	viewUninit
-)
-
 func initalizeDockerClient(m *mainModel) tea.Msg {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
 	if err != nil {
 		return dockerClientInitalized(clientUninit)
 	}
@@ -93,7 +88,10 @@ func (m *mainModel) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(&mainModel{viewState: defaultState}, tea.WithAltScreen())
+	p := tea.NewProgram(
+		&mainModel{viewState: defaultState},
+		tea.WithAltScreen(),
+	)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
