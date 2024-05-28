@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/paginator"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -13,18 +12,15 @@ import (
 	"github.com/docker/docker/client"
 )
 
-type dockerClientListInitalized []types.Container
-
 // List Model Struct
 type ListModel struct {
-	Client           *client.Client
-	pg               paginator.Model
-	vp               viewport.Model
-	items            []types.Container
-	cursorPos        int
-	width            int
-	height           int
-	extendedHelpFlag bool
+	Client    *client.Client
+	pg        paginator.Model
+	vp        viewport.Model
+	items     []types.Container
+	cursorPos int
+	width     int
+	height    int
 }
 
 // Get Contianer List
@@ -39,16 +35,6 @@ func dockerContianersList(m *ListModel) ([]types.Container, error) {
 	return containers, nil
 }
 
-// Update Containers List every second
-func (m *ListModel) intervalUpdates() tea.Cmd {
-	return tea.Tick(time.Second,
-		func(_ time.Time) tea.Msg {
-			m.items, _ = dockerContianersList(m)
-			m.pg.SetTotalPages(len(m.items))
-			return dockerClientListInitalized(m.items)
-		},
-	)
-}
 func (m *ListModel) Init() tea.Cmd {
 
 	m.vp = viewport.Model{}
@@ -59,7 +45,7 @@ func (m *ListModel) Init() tea.Cmd {
 	m.pg = pg
 	m.items, _ = dockerContianersList(m)
 	m.pg.SetTotalPages(len(m.items))
-	return m.intervalUpdates()
+	return func() tea.Msg { return UpdateViewModel(0) }
 }
 
 func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -75,14 +61,6 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursorPos < len(m.items)-1 {
 				m.cursorPos++
 			}
-		case "?":
-			m.extendedHelpFlag = !m.extendedHelpFlag
-			if m.extendedHelpFlag {
-				m.vp.Height = m.height - 10
-				return m, nil
-			}
-			m.vp.Height = m.height - 2
-			return m, nil
 
 		case "r":
 			start, _ := m.pg.GetSliceBounds(len(m.items))
@@ -126,16 +104,16 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		}
 
-	case tea.WindowSizeMsg:
+	case windowSizeUpdateEvent:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.vp.Height = msg.Height - 2
 		m.vp.Width = msg.Width
 		m.pg.PerPage = (msg.Height - 2) / 4
 
-	case dockerClientListInitalized:
-		m.items = msg
-		cmd = m.intervalUpdates()
+	case UpdateViewModel:
+		m.items, _ = dockerContianersList(m)
+		m.pg.SetTotalPages(len(m.items))
 		return m, cmd
 	}
 
@@ -162,10 +140,7 @@ func (m *ListModel) View() string {
 
 	m.vp.SetContent(outputStr)
 
-	if m.extendedHelpFlag {
-		return m.vp.View() + "\n" + m.pg.View() + extendedHelpView()
-	}
-	return m.vp.View() + "\n" + m.pg.View() + helpView()
+	return m.vp.View() + "\n" + m.pg.View()
 }
 
 func containerString(c types.Container) string {
@@ -176,9 +151,10 @@ func containerString(c types.Container) string {
 		c.Status,
 	)
 }
-func extendedHelpView() string {
+
+func (*ListModel) extendedHelpView() string {
 	return "\n↑/↓ to navigate,\n r restart container, s start contianer, p pause, d destroy container x kill contianer, q to quit"
 }
-func helpView() string {
+func (*ListModel) helpView() string {
 	return "\n↑/↓ to navigate, r restart, s start, p pause, q quit, d destroy, ? help"
 }
